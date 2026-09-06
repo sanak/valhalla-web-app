@@ -47,12 +47,19 @@ export function getActor(): Promise<ValhallaActor> {
 
   resetActor();
   bootedTarUrl = tarUrl;
-  actorPromise = boot(tarUrl).catch((error: unknown) => {
-    // a failed boot must not stay cached, or every later call replays the same failure
-    actorPromise = null;
-    bootedTarUrl = null;
-    throw error;
-  });
+  const pending: Promise<ValhallaActor> = boot(tarUrl).catch(
+    (error: unknown) => {
+      // a failed boot must not stay cached, or every later call replays the same failure - but
+      // only clear state if this attempt is still the current one, or a stale rejection from a
+      // superseded boot would clobber (and orphan) a newer, live actor
+      if (actorPromise === pending) {
+        actorPromise = null;
+        bootedTarUrl = null;
+      }
+      throw error;
+    }
+  );
+  actorPromise = pending;
   return actorPromise;
 }
 
