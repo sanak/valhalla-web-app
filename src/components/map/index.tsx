@@ -36,6 +36,7 @@ import {
   DOUBLE_TAP_THRESHOLD_MS,
 } from './constants';
 import type { MapStyleType } from './types';
+import { CoverageArea } from './parts/coverage-area';
 import { RouteLines } from './parts/route-lines';
 import { HighlightSegment } from './parts/highlight-segment';
 import { IsochronePolygons } from './parts/isochrone-polygons';
@@ -834,6 +835,7 @@ export const MapComponent = () => {
           onStyleChange={handleStyleChange}
           onCustomStyleLoaded={handleCustomStyleLoaded}
         />
+        <CoverageArea />
         <RouteLines />
         <HighlightSegment />
         <IsochronePolygons />
