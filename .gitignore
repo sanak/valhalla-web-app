@@ -44,3 +44,6 @@ count.txt
 .nitro
 .tanstack
 .wrangler
+
+# Valhalla wasm runtime artifacts (npm run wasm:sync)
+/public/valhalla-wasm
