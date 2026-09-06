@@ -145,6 +145,31 @@ describe('valhalla-client (server mode)', () => {
     });
   });
 
+  it('wraps a transport failure in ValhallaApiError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new TypeError('Failed to fetch')
+    );
+
+    await expect(requestRoute(ROUTE_REQUEST)).rejects.toMatchObject({
+      name: 'ValhallaApiError',
+      message: 'Failed to fetch',
+    });
+  });
+
+  it('lets an aborted fetch through as a DOMException', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new DOMException('Aborted', 'AbortError')
+    );
+
+    const abortion = await requestRoute(ROUTE_REQUEST).catch(
+      (error: unknown) => error
+    );
+
+    expect(abortion).toBeInstanceOf(DOMException);
+    expect(abortion).not.toBeInstanceOf(ValhallaApiError);
+    expect(isAbortError(abortion)).toBe(true);
+  });
+
   it('passes the abort signal through to fetch', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')

@@ -12,8 +12,11 @@ import { getValhallaUrl, VALHALLA_CLIENT_HEADERS } from './valhalla';
 
 /**
  * The single failure type both backends collapse into. The HTTP service reports failures as a
- * `{error, error_code}` body; the wasm bindings throw an object carrying `message`/`code`/
- * `httpCode`. Callers see neither shape.
+ * `{error, error_code}` body or as a `fetch` transport error; the wasm bindings throw an object
+ * carrying `message`/`code`/`httpCode`. Callers see none of those shapes.
+ *
+ * The one deliberate exception is a cancelled request, which stays the `DOMException` named
+ * `AbortError` that `isAbortError` looks for.
  */
 export class ValhallaApiError extends Error {
   readonly code?: number;
@@ -70,7 +73,22 @@ async function callServer<T>(
     url += `?${new URLSearchParams({ json: JSON.stringify(request) })}`;
   }
 
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    // a dead server, a DNS failure or a CORS rejection makes fetch throw a bare
+    // `TypeError: Failed to fetch`, which would otherwise escape the transport boundary
+    // unnormalised. Aborts are the one thing that must pass through untouched: callers
+    // recognise a superseded request by `isAbortError`, and wrapping one would turn every
+    // cancelled query into a cleared route and an error toast.
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new ValhallaApiError(
+      error instanceof Error ? error.message : 'Could not fetch resource'
+    );
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));

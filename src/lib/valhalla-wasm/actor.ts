@@ -25,6 +25,11 @@ async function loadConfig(tarUrl: string): Promise<Record<string, unknown>> {
 }
 
 async function boot(tarUrl: string): Promise<ValhallaActor> {
+  if (tarUrl.trim() === '') {
+    throw new Error(
+      'No tileset tar URL is configured. Set one under Routing Engine in the settings panel, or provide VITE_VALHALLA_TAR_URL at build time.'
+    );
+  }
   const config = await loadConfig(tarUrl);
   // @vite-ignore keeps Vite out of the emscripten glue: worker.js imports valhalla.mjs
   // relatively and valhalla.mjs loads valhalla.wasm next to itself
