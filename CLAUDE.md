@@ -25,6 +25,8 @@ npm run typecheck      # tsc --noEmit
 npm run prettier       # Format
 npm run check          # prettier:check && lint  (run before opening a PR)
 npm run check:deps     # taze: list outdated deps interactively
+
+npm run wasm:sync      # Copy the Valhalla wasm artifacts into public/valhalla-wasm/ (gitignored)
 ```
 
 Husky `pre-commit` runs `npm run typecheck && npx lint-staged` (eslint --fix on `*.{js,jsx,ts,tsx}`, prettier on `*.{json,md,scss,yaml,yml}`). CI (`.github/workflows/playwright.yml`) runs typecheck → lint → vitest → playwright (chromium only) on every PR.
@@ -83,6 +85,9 @@ Server-state lives in TanStack Query. The global `QueryClient` (`src/lib/tanstac
 ### Backend integration
 
 - **Valhalla base URL**: `getBaseUrl()` in `src/utils/base-url.ts` reads `localStorage['valhalla_base_url']` first, then falls back to `VITE_VALHALLA_URL`. The settings panel lets users override and `testConnection()` validates by hitting `/status` and checking `available_actions` includes `route` and `isochrone`.
+- **Routing backend**: `getRoutingMode()` in `src/utils/routing-engine.ts` picks between `server` (HTTP to `getValhallaUrl()`) and `wasm` (in-browser WebAssembly). `VITE_ROUTING_MODE` sets the default; the "Routing Engine" settings section (`src/components/settings-panel/engine-settings.tsx`) overrides it via `localStorage['valhalla_routing_mode']` (and the tar URL via `localStorage['valhalla_tar_url']`). **Every Valhalla request goes through `src/utils/valhalla-client.ts`** — that is the only module that knows which backend is active. Add new actions there, not at call sites.
+- **WASM mode**: `src/lib/valhalla-wasm/actor.ts` boots a worker from `public/valhalla-wasm/` (gitignored; populated by `npm run wasm:sync` from a built `wasm-bindings` checkout of the valhalla repo). The upstream `index.mjs` proxy is loaded by dynamic import rather than reimplemented, because its postMessage protocol changes upstream while its API surface does not. Tiles are range-fetched from the tar at `VITE_VALHALLA_TAR_URL` (or its localStorage override) and cached in IDBFS at `/valhalla-cache`. The `/tile` MVT endpoint has no wasm equivalent, so the Tiles tab's Valhalla layers switch is disabled in this mode; Graph age is hidden (replaced by the tar URL under "Tileset") because `tileset_last_modified` reports the IDBFS cache directory's mtime once a `cacheDir` is set, not the tileset's actual build time. The tileset coverage outline drawn on the map (`src/components/map/parts/coverage-area.tsx`, via `useCoverageQuery`) comes from `status.bbox`, which only exists when the server was built with a connectivity map (a bare `tile_dir` server returns no `bbox` at all) — so an absent outline in wasm mode can be expected behavior, not a bug.
+- **`tsconfig.json`'s `public` exclude**: `include` is the repo-wide `**/*.js` (with `allowJs`/`checkJs` on), so once `npm run wasm:sync` has populated `public/valhalla-wasm/worker.js`, `tsc` (and therefore the husky pre-commit hook) would try to typecheck upstream Emscripten glue and fail with a wall of errors. `public` is excluded specifically to keep that out — don't remove it.
 - **Client ID header**: every Valhalla request sends `X-Client-Id: ${VITE_CLIENT_ID}`. `src/index.tsx` warns at startup if it's unset or `unknown-web-app`. Production CI sets it to `public-web-app`.
 - **Nominatim**: `src/utils/nominatim.ts`, base URL from `VITE_NOMINATIM_URL`.
 
@@ -104,6 +109,8 @@ All build-time, prefixed `VITE_`. Defined in `.env`, typed in `src/vite-env.d.ts
 | `VITE_CENTER_COORDS`         | Initial map center `"lat,lng"`                                                   |
 | `VITE_DEFAULT_COSTING_MODEL` | Default profile (auto/bicycle/pedestrian/car/truck/bus/motor_scooter/motorcycle) |
 | `VITE_CLIENT_ID`             | Sent as `X-Client-Id` on Valhalla requests                                       |
+| `VITE_ROUTING_MODE`          | Default routing backend: `server` or `wasm` (overridable via UI/localStorage)    |
+| `VITE_VALHALLA_TAR_URL`      | Tar tileset range-fetched by wasm mode (overridable via UI/localStorage)         |
 
 ## Deployment
 

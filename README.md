@@ -78,3 +78,59 @@ Edit `.env` to manage
 - Valhalla API server
 - Tile server
 - Map start location
+
+## WebAssembly routing
+
+Besides talking to a remote Valhalla server, this app can run routing entirely in the browser via
+the [Valhalla wasm bindings](https://github.com/valhalla/valhalla), reading tiles by HTTP Range
+request from a tar hosted anywhere. This is useful for small, self-contained deployments (a single
+region's tileset) that need no routing backend at all.
+
+### 1. Build the bindings
+
+In a checkout of the [valhalla](https://github.com/valhalla/valhalla) repo:
+
+```bash
+cd src/bindings/wasm
+./scripts/build_deps.sh
+./scripts/build.sh
+```
+
+### 2. Sync the artifacts into this app
+
+```bash
+npm run wasm:sync
+```
+
+This copies `valhalla.mjs`, `valhalla.wasm`, `worker.js`, `index.mjs`, and a `valhalla.json`
+config into `public/valhalla-wasm/` (gitignored — each machine syncs its own copy). By default it
+looks for a `valhalla` checkout next to this repo; point elsewhere with
+`VALHALLA_REPO=/path/to/valhalla npm run wasm:sync`.
+
+### 3. Configure the app
+
+Set in `.env`:
+
+```
+VITE_ROUTING_MODE=wasm
+VITE_VALHALLA_TAR_URL=https://tiles.example.com/tiles.tar
+```
+
+(Both can also be changed at runtime from the "Routing Engine" section of the settings panel,
+without a rebuild.)
+
+### Tar host requirements
+
+The tar is read with HTTP Range requests, not downloaded whole, so the host serving it must:
+
+- Send `Accept-Ranges: bytes`
+- Allow the `Range` request header via CORS
+- Set `Access-Control-Expose-Headers: Content-Range`
+
+### Notes
+
+- The first request downloads roughly 6.4MB of wasm/glue code before any routing happens.
+- Routing blocks on synchronous range requests against the tar, so a small regional tileset behind
+  a CDN is the intended shape — not a planet-scale tar.
+- Tiles read from the tar are cached in the browser's IndexedDB (IDBFS) and survive reloads; use
+  "Clear tile cache" in the Routing Engine settings section to reset it.
