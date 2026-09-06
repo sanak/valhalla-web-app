@@ -194,6 +194,10 @@ vi.mock('./draw-control', () => ({
   DrawControl: vi.fn(() => <div data-testid="draw-control">Draw Control</div>),
 }));
 
+vi.mock('./parts/coverage-area', () => ({
+  CoverageArea: vi.fn(() => <div data-testid="coverage-area">Coverage</div>),
+}));
+
 vi.mock('./parts/route-lines', () => ({
   RouteLines: vi.fn(() => <div data-testid="route-lines">Route Lines</div>),
 }));
