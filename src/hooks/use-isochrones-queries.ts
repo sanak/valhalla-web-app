@@ -1,17 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import type {
-  ActiveWaypoint,
-  Center,
-  ValhallaIsochroneResponse,
-} from '@/components/types';
+import type { ActiveWaypoint, Center } from '@/components/types';
+import { buildIsochronesRequest, showValhallaWarnings } from '@/utils/valhalla';
 import {
-  getValhallaUrl,
-  buildIsochronesRequest,
-  showValhallaWarnings,
-  VALHALLA_CLIENT_HEADERS,
-} from '@/utils/valhalla';
+  requestIsochrone,
+  describeRoutingError,
+} from '@/utils/valhalla-client';
 import {
   reverse_geocode,
   forward_geocode,
@@ -23,7 +18,7 @@ import { useCommonStore } from '@/stores/common-store';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import { router } from '@/routes';
 
-async function fetchIsochrones() {
+async function fetchIsochrones(signal?: AbortSignal) {
   const { geocodeResults, maxRange, interval, denoise, generalize } =
     useIsochronesStore.getState();
   const profile = router.state.location.search.profile;
@@ -46,33 +41,20 @@ async function fetchIsochrones() {
     generalize,
     interval,
   });
-  const params = new URLSearchParams({
-    json: JSON.stringify(valhallaRequest.json),
+  const isochroneResponse = await requestIsochrone(valhallaRequest.json, {
+    signal,
   });
-
-  const response = await fetch(`${getValhallaUrl()}/isochrone?${params}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...VALHALLA_CLIENT_HEADERS,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Could not fetch resource');
-  }
-
-  const data: ValhallaIsochroneResponse = await response.json();
 
   // Calculate area for each feature
-  data.features.forEach((feature) => {
+  isochroneResponse.features.forEach((feature) => {
     if (feature.properties) {
       feature.properties.area = calcArea(feature);
     }
   });
 
-  showValhallaWarnings(data.warnings);
+  showValhallaWarnings(isochroneResponse.warnings);
 
-  return data;
+  return isochroneResponse;
 }
 
 export function useIsochronesQuery() {
@@ -80,31 +62,29 @@ export function useIsochronesQuery() {
 
   return useQuery({
     queryKey: ['isochrones'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       showLoading(true);
       try {
-        const data = await fetchIsochrones();
-        if (data) {
+        const isochroneResponse = await fetchIsochrones(signal);
+        if (isochroneResponse) {
           useIsochronesStore.setState((state) => {
-            state.results.data = data;
+            state.results.data = isochroneResponse;
             state.successful = true;
           });
         }
-        return data;
+        return isochroneResponse;
       } catch (error) {
         useIsochronesStore.setState((state) => {
           state.results.data = null;
           state.successful = false;
         });
 
-        if (error instanceof Error) {
-          toast.warning('Error', {
-            description: error.message || 'Failed to fetch isochrones',
-            position: 'bottom-center',
-            duration: 5000,
-            closeButton: true,
-          });
-        }
+        toast.warning('Error', {
+          description: describeRoutingError(error),
+          position: 'bottom-center',
+          duration: 5000,
+          closeButton: true,
+        });
         throw error;
       } finally {
         setTimeout(() => showLoading(false), 500);

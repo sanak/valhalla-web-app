@@ -2,16 +2,17 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useDirectionsStore } from '@/stores/directions-store';
 import {
-  getValhallaUrl,
   buildOptimizedRouteRequest,
   parseDirectionsGeometry,
   showValhallaWarnings,
-  VALHALLA_CLIENT_HEADERS,
 } from '@/utils/valhalla';
+import {
+  requestOptimizedRoute,
+  describeRoutingError,
+} from '@/utils/valhalla-client';
 import { filterProfileSettings } from '@/utils/filter-profile-settings';
 import { useCommonStore } from '@/stores/common-store';
 import { router } from '@/routes';
-import type { ValhallaOptimizedRouteResponse } from '@/components/types';
 import type { Waypoint } from '@/stores/directions-store';
 import { getDirectionsLanguage } from '@/utils/directions-language';
 
@@ -51,30 +52,15 @@ export function useOptimizedRouteQuery() {
         settings,
         language,
       });
-      const params = new URLSearchParams({
-        json: JSON.stringify(request.json),
-      });
-
-      const response = await fetch(
-        `${getValhallaUrl()}/optimized_route?${params}`,
-        {
-          headers: VALHALLA_CLIENT_HEADERS,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Could not fetch resource`);
-      }
-
-      const data: ValhallaOptimizedRouteResponse = await response.json();
+      const optimizedResponse = await requestOptimizedRoute(request.json);
 
       const processedData = {
-        ...data,
-        id: data.id ?? 'valhalla_optimized_route',
-        decodedGeometry: parseDirectionsGeometry(data),
+        ...optimizedResponse,
+        id: optimizedResponse.id ?? 'valhalla_optimized_route',
+        decodedGeometry: parseDirectionsGeometry(optimizedResponse),
       };
 
-      showValhallaWarnings(data.trip.warnings);
+      showValhallaWarnings(optimizedResponse.trip.warnings);
 
       return { data: processedData, relevantWaypoints };
     },
@@ -97,7 +83,9 @@ export function useOptimizedRouteQuery() {
     },
     onError: (error) => {
       console.error('Optimization error:', error);
-      toast.error('Failed to optimize route');
+      toast.error('Failed to optimize route', {
+        description: describeRoutingError(error),
+      });
     },
   });
 

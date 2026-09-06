@@ -4,15 +4,13 @@ import { toast } from 'sonner';
 import type {
   ActiveWaypoint,
   ParsedDirectionsGeometry,
-  ValhallaRouteResponse,
 } from '@/components/types';
 import {
-  getValhallaUrl,
   buildDirectionsRequest,
   parseDirectionsGeometry,
   showValhallaWarnings,
-  VALHALLA_CLIENT_HEADERS,
 } from '@/utils/valhalla';
+import { requestRoute, describeRoutingError } from '@/utils/valhalla-client';
 import { forward_geocode, parseGeocodeResponse } from '@/utils/nominatim';
 import { filterProfileSettings } from '@/utils/filter-profile-settings';
 import { getDirectionsLanguage } from '@/utils/directions-language';
@@ -23,7 +21,7 @@ import { router } from '@/routes';
 const getActiveWaypoints = (waypoints: Waypoint[]): ActiveWaypoint[] =>
   waypoints.flatMap((wp) => wp.geocodeResults.filter((r) => r.selected));
 
-async function fetchDirections() {
+async function fetchDirections(signal?: AbortSignal) {
   const waypoints = useDirectionsStore.getState().waypoints;
   const profile = router.state.location.search.profile;
   const { dateTime, settings: rawSettings } = useCommonStore.getState();
@@ -44,46 +42,24 @@ async function fetchDirections() {
     dateTime,
     language,
   });
-  const params = new URLSearchParams({
-    json: JSON.stringify(valhallaRequest.json),
-  });
-
-  const response = await fetch(`${getValhallaUrl()}/route?${params}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...VALHALLA_CLIENT_HEADERS,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    let error_msg = errorData.error || 'Could not fetch resource';
-
-    // Append context for route-specific error
-    if (errorData.error_code === 154) {
-      error_msg += ` for route.`;
-    }
-
-    throw new Error(error_msg);
-  }
-
-  const data: ValhallaRouteResponse = await response.json();
+  const routeResponse = await requestRoute(valhallaRequest.json, { signal });
 
   // Parse geometry for main route
-  (data as ParsedDirectionsGeometry).decodedGeometry =
-    parseDirectionsGeometry(data);
+  (routeResponse as ParsedDirectionsGeometry).decodedGeometry =
+    parseDirectionsGeometry(routeResponse);
 
   // Parse geometry for alternates
-  data.alternates?.forEach((alternate, i) => {
+  routeResponse.alternates?.forEach((alternate, i) => {
     if (alternate) {
-      (data.alternates![i] as ParsedDirectionsGeometry).decodedGeometry =
-        parseDirectionsGeometry(alternate);
+      (
+        routeResponse.alternates![i] as ParsedDirectionsGeometry
+      ).decodedGeometry = parseDirectionsGeometry(alternate);
     }
   });
 
-  showValhallaWarnings(data.trip.warnings);
+  showValhallaWarnings(routeResponse.trip.warnings);
 
-  return data as ParsedDirectionsGeometry;
+  return routeResponse as ParsedDirectionsGeometry;
 }
 
 export function useDirectionsQuery() {
@@ -96,25 +72,23 @@ export function useDirectionsQuery() {
 
   return useQuery({
     queryKey: ['directions'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       showLoading(true);
       try {
-        const data = await fetchDirections();
-        if (data) {
-          receiveRouteResults({ data });
-          zoomTo(data.decodedGeometry);
+        const directions = await fetchDirections(signal);
+        if (directions) {
+          receiveRouteResults({ data: directions });
+          zoomTo(directions.decodedGeometry);
         }
-        return data;
+        return directions;
       } catch (error) {
         clearRoutes();
-        if (error instanceof Error) {
-          toast.warning('Error', {
-            description: error.message,
-            position: 'bottom-center',
-            duration: 5000,
-            closeButton: true,
-          });
-        }
+        toast.warning('Error', {
+          description: describeRoutingError(error),
+          position: 'bottom-center',
+          duration: 5000,
+          closeButton: true,
+        });
         throw error;
       } finally {
         setTimeout(() => showLoading(false), 500);

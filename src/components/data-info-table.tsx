@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getValhallaUrl, VALHALLA_CLIENT_HEADERS } from '@/utils/valhalla';
+import { requestStatus } from '@/utils/valhalla-client';
 
 const VALHALLA_REPO_URL = 'https://github.com/valhalla/valhalla';
 
@@ -45,15 +45,12 @@ export const DataInfoTable = () => {
     isError,
   } = useQuery({
     queryKey: ['valhallaStatus'],
-    queryFn: async (): Promise<ValhallaStatus> => {
-      const response = await fetch(`${getValhallaUrl()}/status`, {
-        headers: VALHALLA_CLIENT_HEADERS,
-      });
-      const statusResponse = await response.json();
+    queryFn: async ({ signal }): Promise<ValhallaStatus> => {
+      const status = await requestStatus({ signal });
       return {
-        version: statusResponse.version,
-        buildFinished: statusResponse.tileset_last_modified
-          ? new Date(statusResponse.tileset_last_modified * 1000)
+        version: status.version,
+        buildFinished: status.tileset_last_modified
+          ? new Date(status.tileset_last_modified * 1000)
           : null,
       };
     },
