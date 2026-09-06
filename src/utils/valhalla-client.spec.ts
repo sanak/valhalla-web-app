@@ -5,6 +5,7 @@ import {
   requestStatus,
   ValhallaApiError,
   describeRoutingError,
+  isAbortError,
 } from './valhalla-client';
 
 vi.mock('@/utils/valhalla', () => ({
@@ -188,5 +189,23 @@ describe('describeRoutingError', () => {
 
   it('handles a non-error', () => {
     expect(describeRoutingError('nope')).toBe('Could not fetch resource');
+  });
+});
+
+describe('isAbortError', () => {
+  it('is true for an AbortError DOMException', () => {
+    expect(isAbortError(new DOMException('Aborted', 'AbortError'))).toBe(true);
+  });
+
+  it('is false for a ValhallaApiError', () => {
+    expect(isAbortError(new ValhallaApiError('Bad request', 100))).toBe(false);
+  });
+
+  it('is false for a plain Error', () => {
+    expect(isAbortError(new Error('network down'))).toBe(false);
+  });
+
+  it('is false for a non-error value', () => {
+    expect(isAbortError('nope')).toBe(false);
   });
 });

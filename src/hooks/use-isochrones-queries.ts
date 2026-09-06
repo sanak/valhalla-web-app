@@ -6,6 +6,7 @@ import { buildIsochronesRequest, showValhallaWarnings } from '@/utils/valhalla';
 import {
   requestIsochrone,
   describeRoutingError,
+  isAbortError,
 } from '@/utils/valhalla-client';
 import {
   reverse_geocode,
@@ -74,6 +75,9 @@ export function useIsochronesQuery() {
         }
         return isochroneResponse;
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         useIsochronesStore.setState((state) => {
           state.results.data = null;
           state.successful = false;

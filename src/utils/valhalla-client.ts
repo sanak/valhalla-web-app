@@ -131,6 +131,16 @@ export function requestStatus(options?: CallOptions & { verbose?: boolean }) {
   );
 }
 
+/**
+ * True for a cancelled request. Both backends signal cancellation the same way: `fetch` rejects
+ * with a `DOMException` named `AbortError` when its signal fires, and the wasm bindings' `callWasm`
+ * (wired up in task 5) rejects with the same shape. Callers use this to distinguish "the user
+ * triggered a newer request" from a genuine failure.
+ */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 /** Turns a failure into the sentence a user should read. */
 export function describeRoutingError(error: unknown): string {
   if (!(error instanceof ValhallaApiError)) {

@@ -10,7 +10,11 @@ import {
   parseDirectionsGeometry,
   showValhallaWarnings,
 } from '@/utils/valhalla';
-import { requestRoute, describeRoutingError } from '@/utils/valhalla-client';
+import {
+  requestRoute,
+  describeRoutingError,
+  isAbortError,
+} from '@/utils/valhalla-client';
 import { forward_geocode, parseGeocodeResponse } from '@/utils/nominatim';
 import { filterProfileSettings } from '@/utils/filter-profile-settings';
 import { getDirectionsLanguage } from '@/utils/directions-language';
@@ -82,6 +86,9 @@ export function useDirectionsQuery() {
         }
         return directions;
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         clearRoutes();
         toast.warning('Error', {
           description: describeRoutingError(error),

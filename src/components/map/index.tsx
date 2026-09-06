@@ -332,6 +332,14 @@ export const MapComponent = () => {
       try {
         const heightResponse = await requestHeight(heightPayloadNew);
 
+        if (!heightResponse.range_height) {
+          console.error(
+            'Height response is missing range_height',
+            heightResponse
+          );
+          return;
+        }
+
         const reversedGeometry = JSON.parse(
           JSON.stringify(directionResults.data?.decodedGeometry)
         ).map((pair: number[]) => {
@@ -339,7 +347,7 @@ export const MapComponent = () => {
         });
         const heightData = buildHeightgraphData(
           reversedGeometry,
-          heightResponse.range_height ?? []
+          heightResponse.range_height
         );
         const { inclineTotal, declineTotal } = heightData[0]!.properties;
         updateInclineDecline({
