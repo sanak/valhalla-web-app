@@ -24,7 +24,9 @@ import { useParams, useSearch } from '@tanstack/react-router';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { useIsochronesQuery } from '@/hooks/use-isochrones-queries';
 import { CollapsibleSection } from '@/components/ui/collapsible-section';
+import { EngineSettings } from '@/components/settings-panel/engine-settings';
 import { ServerSettings } from '@/components/settings-panel/server-settings';
+import { getRoutingMode } from '@/utils/routing-engine';
 import { MultiSelectSetting } from '../ui/multiselect-setting';
 
 type ProfileWithSettings = Exclude<Profile, 'auto'>;
@@ -117,7 +119,8 @@ export const SettingsPanel = () => {
           </Button>
         </SheetHeader>
         <div className="px-3 space-y-3">
-          <ServerSettings />
+          <EngineSettings />
+          {getRoutingMode() === 'server' && <ServerSettings />}
 
           {hasProfileSettings && (
             <CollapsibleSection
