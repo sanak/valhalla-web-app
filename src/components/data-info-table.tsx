@@ -80,7 +80,9 @@ export const DataInfoTable = () => {
         {isWasmMode ? (
           <TableRow>
             <TableCell>Tileset</TableCell>
-            <TableCell className="font-mono break-all">{getTarUrl()}</TableCell>
+            <TableCell className="font-mono break-all">
+              {getTarUrl() || '—'}
+            </TableCell>
           </TableRow>
         ) : (
           <TableRow>

@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getRoutingMode, getTarUrl } from '@/utils/routing-engine';
 import { requestStatus } from '@/utils/valhalla-client';
 
+/** Exported so the settings panel can drop the cached coverage when the backend config moves. */
+export const COVERAGE_QUERY_KEY = 'tilesetCoverage';
+
 /**
  * The tileset's coverage, as level-2 tile boundaries from Valhalla's connectivity map. Only
  * meaningful in wasm mode: a global server covers everything, so drawing it says nothing.
@@ -15,7 +18,7 @@ export function useCoverageQuery() {
   const tarUrl = getTarUrl();
 
   return useQuery({
-    queryKey: ['tilesetCoverage', tarUrl],
+    queryKey: [COVERAGE_QUERY_KEY, tarUrl],
     queryFn: async ({ signal }) => {
       const status = await requestStatus({ verbose: true, signal });
       return status.bbox ?? null;
