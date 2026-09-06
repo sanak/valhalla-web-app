@@ -66,6 +66,7 @@ describe('ValhallaLayersToggle', () => {
     mockMap = createMockMap();
     mockMapReady = true;
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -100,6 +101,17 @@ describe('ValhallaLayersToggle', () => {
       );
 
       expect(container).toBeEmptyDOMElement();
+    });
+
+    it('disables the toggle and explains why in wasm mode', () => {
+      localStorage.setItem('valhalla_routing_mode', 'wasm');
+
+      render(<ValhallaLayersToggle customLayers={[]} />);
+
+      expect(screen.getByRole('switch')).toBeDisabled();
+      expect(
+        screen.getByText(/only available in remote server mode/i)
+      ).toBeInTheDocument();
     });
   });
 

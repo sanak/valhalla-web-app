@@ -16,6 +16,7 @@ vi.mock('@/utils/valhalla-client', () => ({
 describe('DataInfoTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('renders a relative build time and links the commit SHA to its GitHub commit', () => {
@@ -69,6 +70,27 @@ describe('DataInfoTable', () => {
     // Radix renders the tooltip content into a portal; the exact instant shows.
     const utc = await screen.findAllByText('2026-08-18 07:17:16 UTC');
     expect(utc.length).toBeGreaterThan(0);
+  });
+
+  it('shows the tar url instead of graph age in wasm mode', () => {
+    localStorage.setItem('valhalla_routing_mode', 'wasm');
+    localStorage.setItem(
+      'valhalla_tar_url',
+      'https://tiles.example/region.tar'
+    );
+    mockUseQuery.mockReturnValue({
+      data: { version: '3.8.3', buildFinished: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<DataInfoTable />);
+
+    expect(screen.queryByText('Graph age')).not.toBeInTheDocument();
+    expect(screen.getByText('Tileset')).toBeInTheDocument();
+    expect(
+      screen.getByText('https://tiles.example/region.tar')
+    ).toBeInTheDocument();
   });
 
   it('shows an error state when the status request fails', () => {

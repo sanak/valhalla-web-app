@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { requestStatus } from '@/utils/valhalla-client';
+import { getRoutingMode, getTarUrl } from '@/utils/routing-engine';
 
 const VALHALLA_REPO_URL = 'https://github.com/valhalla/valhalla';
 
@@ -66,29 +67,42 @@ export const DataInfoTable = () => {
   }
 
   const parsedVersion = parseVersion(status.version);
+  const isWasmMode = getRoutingMode() === 'wasm';
 
   return (
     <Table data-testid="data-info-table" className="[&_tr]:border-0">
       <TableBody>
-        <TableRow>
-          <TableCell>Graph age</TableCell>
-          <TableCell>
-            {status.buildFinished ? (
-              <Tooltip>
-                <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
-                  {formatDistanceToNow(status.buildFinished, {
-                    addSuffix: true,
-                  })}
-                </TooltipTrigger>
-                <TooltipContent>
-                  {formatUtc(status.buildFinished)}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              '—'
-            )}
-          </TableCell>
-        </TableRow>
+        {/*
+          `tileset_last_modified` comes from the mtime of `GetTileSetLocation()`, which is the
+          IDBFS cache directory once wasm mode sets a cacheDir - the time tiles were last cached,
+          not the time the tileset was built. Showing the tar instead of a wrong age.
+        */}
+        {isWasmMode ? (
+          <TableRow>
+            <TableCell>Tileset</TableCell>
+            <TableCell className="font-mono break-all">{getTarUrl()}</TableCell>
+          </TableRow>
+        ) : (
+          <TableRow>
+            <TableCell>Graph age</TableCell>
+            <TableCell>
+              {status.buildFinished ? (
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
+                    {formatDistanceToNow(status.buildFinished, {
+                      addSuffix: true,
+                    })}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {formatUtc(status.buildFinished)}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                '—'
+              )}
+            </TableCell>
+          </TableRow>
+        )}
         <TableRow>
           <TableCell>Version</TableCell>
           <TableCell className="font-mono">
