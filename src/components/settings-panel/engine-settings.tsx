@@ -22,7 +22,12 @@ import {
   type RoutingMode,
 } from '@/utils/routing-engine';
 
-export const EngineSettings = () => {
+interface EngineSettingsProps {
+  /** Notified after the mode is persisted, so a parent holding its own copy can stay in sync. */
+  onModeChange?: (mode: RoutingMode) => void;
+}
+
+export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
   const queryClient = useQueryClient();
   const [routingMode, setRoutingModeState] = useState<RoutingMode>(() =>
     getRoutingMode()
@@ -45,6 +50,7 @@ export const EngineSettings = () => {
     setRoutingModeState(nextMode);
     setRoutingMode(nextMode);
     rebootBackend();
+    onModeChange?.(nextMode);
   };
 
   const handleTarUrlBlur = () => {

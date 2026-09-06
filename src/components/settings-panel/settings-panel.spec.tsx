@@ -239,6 +239,22 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('Turn Penalty')).toBeInTheDocument();
   });
 
+  describe('Routing Engine mode', () => {
+    it('hides Server Settings once the routing engine is switched to wasm mode', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<SettingsPanel />);
+
+      expect(screen.getByText('Server Settings')).toBeInTheDocument();
+
+      // CollapsibleSection unmounts its children while closed, so the section has to be
+      // opened before the mode radio is queryable.
+      await user.click(screen.getByRole('button', { name: /routing engine/i }));
+      await user.click(screen.getByRole('radio', { name: /browser/i }));
+
+      expect(screen.queryByText('Server Settings')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Server Settings', () => {
     it('should render Server Settings section', () => {
       renderWithQueryClient(<SettingsPanel />);
