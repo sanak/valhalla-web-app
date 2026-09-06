@@ -4,9 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { EngineSettings } from './engine-settings';
 
 const invalidateQueries = vi.fn();
+const resetQueries = vi.fn();
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries }),
+  useQueryClient: () => ({ invalidateQueries, resetQueries }),
 }));
 
 vi.mock('@/lib/valhalla-wasm/actor', () => ({
@@ -57,6 +58,19 @@ describe('EngineSettings', () => {
     expect(screen.getByLabelText(/tar url/i)).toBeInTheDocument();
   });
 
+  it('resets the cached tileset coverage on a mode change', async () => {
+    localStorage.setItem('valhalla_routing_mode', 'wasm');
+    const user = await renderOpened();
+
+    await user.click(screen.getByRole('radio', { name: /remote server/i }));
+
+    // invalidating is not enough: the coverage query is disabled in server mode, and a disabled
+    // query keeps handing back its cached value without notifying observers
+    expect(resetQueries).toHaveBeenCalledWith({
+      queryKey: ['tilesetCoverage'],
+    });
+  });
+
   it('rejects a per-tile url template', async () => {
     localStorage.setItem('valhalla_routing_mode', 'wasm');
     const user = await renderOpened();
@@ -88,6 +102,24 @@ describe('EngineSettings', () => {
     expect(localStorage.getItem('valhalla_tar_url')).toBe(
       'https://other.example/region.tar'
     );
+    expect(resetActor).toHaveBeenCalled();
+  });
+
+  it('resets to the env default when the tar url field is emptied', async () => {
+    localStorage.setItem('valhalla_routing_mode', 'wasm');
+    localStorage.setItem(
+      'valhalla_tar_url',
+      'https://other.example/region.tar'
+    );
+    const user = await renderOpened();
+
+    const tarUrlField = screen.getByLabelText(/tar url/i);
+    await user.clear(tarUrlField);
+    await user.tab();
+
+    expect(localStorage.getItem('valhalla_tar_url')).toBeNull();
+    expect(tarUrlField).toHaveValue('https://tiles.example/planet.tar');
+    expect(screen.queryByText(/cannot be empty/i)).not.toBeInTheDocument();
     expect(resetActor).toHaveBeenCalled();
   });
 

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { COVERAGE_QUERY_KEY } from '@/hooks/use-coverage-query';
 import { clearTileCache, resetActor } from '@/lib/valhalla-wasm/actor';
 import {
   getRoutingMode,
@@ -39,6 +40,11 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
   /** A booted worker answers from the old config, so it has to go whenever the config moves. */
   const rebootBackend = () => {
     resetActor();
+    // The coverage overlay is cached with staleTime/gcTime Infinity and is only meaningful for
+    // the tileset that is loaded right now, so it is reset rather than invalidated: a disabled
+    // query keeps serving its cached value, and invalidating one does not even notify its
+    // observers. Resetting is what actually makes the map drop the outline.
+    void queryClient.resetQueries({ queryKey: [COVERAGE_QUERY_KEY] });
     void queryClient.invalidateQueries();
   };
 
@@ -53,9 +59,25 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
     onModeChange?.(nextMode);
   };
 
+  /** Stores whatever `setTarUrl` ended up keeping, then reboots onto the new config. */
+  const applyTarUrl = (url: string) => {
+    setTarUrlError(null);
+    setTarUrl(url);
+    // setTarUrl trims, and removes the localStorage key entirely for an empty or default
+    // value - re-read it so the field reflects what actually got stored.
+    setTarUrlState(getTarUrl());
+    rebootBackend();
+  };
+
   const handleTarUrlBlur = () => {
     if (tarUrl.trim() === getTarUrl()) {
       setTarUrlError(null);
+      return;
+    }
+    // an emptied field means "back to the env default" - validation would only reject it as
+    // empty and latch an error the user has no other way to clear
+    if (tarUrl.trim() === '') {
+      applyTarUrl('');
       return;
     }
     const validation = validateTarUrl(tarUrl);
@@ -63,12 +85,7 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
       setTarUrlError(validation.error ?? 'Invalid URL');
       return;
     }
-    setTarUrlError(null);
-    setTarUrl(tarUrl);
-    // setTarUrl trims, and removes the localStorage key entirely for an empty or default
-    // value - re-read it so the field reflects what actually got stored.
-    setTarUrlState(getTarUrl());
-    rebootBackend();
+    applyTarUrl(tarUrl);
   };
 
   const handleClearCache = async () => {
