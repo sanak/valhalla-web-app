@@ -1,16 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   requestRoute,
+  requestIsochrone,
   requestHeight,
   requestStatus,
   ValhallaApiError,
   describeRoutingError,
   isAbortError,
 } from './valhalla-client';
+import { getActor } from '@/lib/valhalla-wasm/actor';
 
 vi.mock('@/utils/valhalla', () => ({
   getValhallaUrl: () => 'https://valhalla.example',
   VALHALLA_CLIENT_HEADERS: { 'X-Client-Id': 'test-client' },
+}));
+
+vi.mock('@/lib/valhalla-wasm/actor', () => ({
+  getActor: vi.fn(),
+  resetActor: vi.fn(),
+  clearTileCache: vi.fn(),
 }));
 
 const ROUTE_REQUEST = { locations: [], costing: 'auto' };
@@ -207,5 +215,98 @@ describe('isAbortError', () => {
 
   it('is false for a non-error value', () => {
     expect(isAbortError('nope')).toBe(false);
+  });
+});
+
+describe('valhalla-client (wasm mode)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.stubEnv('VITE_ROUTING_MODE', 'wasm');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('stringifies the request and parses the response', async () => {
+    const route = vi
+      .fn()
+      .mockResolvedValue('{"trip":{"summary":{"length":3}}}');
+    vi.mocked(getActor).mockResolvedValue({ route } as never);
+
+    const routeResponse = await requestRoute(ROUTE_REQUEST);
+
+    expect(route).toHaveBeenCalledWith(JSON.stringify(ROUTE_REQUEST));
+    expect(routeResponse).toEqual({ trip: { summary: { length: 3 } } });
+  });
+
+  it('sends an empty object when there is no request payload', async () => {
+    const status = vi.fn().mockResolvedValue('{"version":"3.8.3"}');
+    vi.mocked(getActor).mockResolvedValue({ status } as never);
+
+    await requestStatus();
+
+    expect(status).toHaveBeenCalledWith('{}');
+  });
+
+  it('sends verbose for a verbose status request', async () => {
+    const status = vi.fn().mockResolvedValue('{"version":"3.8.3"}');
+    vi.mocked(getActor).mockResolvedValue({ status } as never);
+
+    await requestStatus({ verbose: true });
+
+    expect(status).toHaveBeenCalledWith('{"verbose":true}');
+  });
+
+  it('maps an upstream ValhallaError onto ValhallaApiError', async () => {
+    const upstreamError = Object.assign(
+      new Error('No suitable edges near location'),
+      {
+        name: 'ValhallaError',
+        code: 170,
+        httpCode: 400,
+      }
+    );
+    const isochrone = vi.fn().mockRejectedValue(upstreamError);
+    vi.mocked(getActor).mockResolvedValue({ isochrone } as never);
+
+    await expect(requestIsochrone({})).rejects.toMatchObject({
+      name: 'ValhallaApiError',
+      code: 170,
+      httpCode: 400,
+    });
+  });
+
+  it('surfaces a boot failure as ValhallaApiError', async () => {
+    vi.mocked(getActor).mockRejectedValue(
+      new Error('Valhalla wasm artifacts are missing. Run `npm run wasm:sync`')
+    );
+
+    await expect(requestRoute(ROUTE_REQUEST)).rejects.toMatchObject({
+      name: 'ValhallaApiError',
+      message: expect.stringContaining('wasm:sync'),
+    });
+  });
+
+  it('rejects with AbortError when the signal is already aborted', async () => {
+    vi.mocked(getActor).mockResolvedValue({ route: vi.fn() } as never);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      requestRoute(ROUTE_REQUEST, { signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects with AbortError when the signal fires mid-flight', async () => {
+    const controller = new AbortController();
+    const route = vi.fn().mockReturnValue(new Promise(() => undefined));
+    vi.mocked(getActor).mockResolvedValue({ route } as never);
+
+    const pending = requestRoute(ROUTE_REQUEST, { signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

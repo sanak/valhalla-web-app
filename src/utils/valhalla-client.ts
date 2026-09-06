@@ -5,6 +5,7 @@ import type {
   ValhallaRouteResponse,
   ValhallaStatusResponse,
 } from '@/components/types';
+import { getActor } from '@/lib/valhalla-wasm/actor';
 import { normalizeBaseUrl } from './base-url';
 import { getRoutingMode } from './routing-engine';
 import { getValhallaUrl, VALHALLA_CLIENT_HEADERS } from './valhalla';
@@ -83,15 +84,58 @@ async function callServer<T>(
   return response.json() as Promise<T>;
 }
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- signature is wired up in task 5 */
+/**
+ * worker.js serialises actions, so aborting here only discards the result - the worker runs the
+ * request to completion regardless. Real cancellation lands when the upstream bindings grow an
+ * abort path, and this is the only function that has to change when it does.
+ */
+function withAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return work;
+  }
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('Aborted', 'AbortError')),
+        { once: true }
+      );
+    }),
+  ]);
+}
+
 async function callWasm<T>(
   action: ValhallaAction,
   request: unknown,
   options?: CallOptions
 ): Promise<T> {
-  throw new ValhallaApiError('WebAssembly routing is not wired up yet');
+  try {
+    const actor = await getActor();
+    const responseJson = await withAbort(
+      actor[action](JSON.stringify(request ?? {})),
+      options?.signal
+    );
+    return JSON.parse(responseJson) as T;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    const upstreamError = error as {
+      message?: string;
+      code?: number;
+      httpCode?: number;
+    };
+    throw new ValhallaApiError(
+      upstreamError.message ?? 'Could not fetch resource',
+      upstreamError.code,
+      upstreamError.httpCode
+    );
+  }
 }
-/* eslint-enable @typescript-eslint/no-unused-vars */
 
 function call<T>(
   action: ValhallaAction,
@@ -133,9 +177,9 @@ export function requestStatus(options?: CallOptions & { verbose?: boolean }) {
 
 /**
  * True for a cancelled request. Both backends signal cancellation the same way: `fetch` rejects
- * with a `DOMException` named `AbortError` when its signal fires, and the wasm bindings' `callWasm`
- * (wired up in task 5) rejects with the same shape. Callers use this to distinguish "the user
- * triggered a newer request" from a genuine failure.
+ * with a `DOMException` named `AbortError` when its signal fires, and `callWasm`'s `withAbort`
+ * rejects with the same shape. Callers use this to distinguish "the user triggered a newer
+ * request" from a genuine failure.
  */
 export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
