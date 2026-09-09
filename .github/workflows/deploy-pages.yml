@@ -60,6 +60,10 @@ jobs:
             echo "VITE_ROUTING_MODE=wasm"
             echo "VITE_VALHALLA_TAR_URL=$TAR_URL"
             echo "VITE_CLIENT_ID=sanak-wasm-demo"
+            # the tileset only covers Japan, so Berlin (the upstream default) opens the
+            # demo outside its own coverage. DEFAULT_ZOOM is a hardcoded 10, so this has to
+            # be somewhere that reads well at city scale rather than the centre of the country
+            echo "VITE_CENTER_COORDS=35.68,139.77"
           } > .env.production.local
 
       # vite.config.ts derives `base` from package.json homepage
