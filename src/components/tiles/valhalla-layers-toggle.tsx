@@ -4,6 +4,7 @@ import type { LayerSpecification } from 'maplibre-gl';
 import { useCommonStore } from '@/stores/common-store';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { getRoutingMode } from '@/utils/routing-engine';
 import {
   VALHALLA_SOURCE_ID,
   VALHALLA_LAYERS,
@@ -20,6 +21,7 @@ export const ValhallaLayersToggle = ({
   const { mainMap } = useMap();
   const mapReady = useCommonStore((state) => state.mapReady);
   const [enabled, setEnabled] = useState(false);
+  const serverModeOnly = getRoutingMode() !== 'server';
 
   useEffect(() => {
     if (!mainMap) return;
@@ -100,19 +102,28 @@ export const ValhallaLayersToggle = ({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-md">
-      <Label
-        htmlFor="valhalla-layers-toggle"
-        className="text-sm font-medium cursor-pointer"
-      >
-        Show Valhalla layers
-      </Label>
-      <Switch
-        id="valhalla-layers-toggle"
-        checked={enabled}
-        onCheckedChange={handleToggle}
-        className="data-[state=checked]:bg-green-600"
-      />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-md">
+        <Label
+          htmlFor="valhalla-layers-toggle"
+          className="text-sm font-medium cursor-pointer"
+        >
+          Show Valhalla layers
+        </Label>
+        <Switch
+          id="valhalla-layers-toggle"
+          checked={enabled}
+          onCheckedChange={handleToggle}
+          disabled={serverModeOnly}
+          className="data-[state=checked]:bg-green-600"
+        />
+      </div>
+      {serverModeOnly && (
+        <p className="text-muted-foreground text-xs">
+          Valhalla layers come from the server&apos;s /tile endpoint and are
+          only available in remote server mode.
+        </p>
+      )}
     </div>
   );
 };

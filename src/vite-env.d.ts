@@ -6,6 +6,9 @@ interface ImportMetaEnv {
   readonly VITE_VALHALLA_URL?: string;
   readonly VITE_DEFAULT_COSTING_MODEL?: string;
   readonly VITE_CLIENT_ID?: string;
+  readonly VITE_ROUTING_MODE?: string;
+  readonly VITE_VALHALLA_TILE_URL?: string;
+  readonly VITE_VALHALLA_TILE_URL_GZ?: string;
 }
 
 interface ImportMeta {

@@ -6,7 +6,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { getValhallaUrl, VALHALLA_CLIENT_HEADERS } from '@/utils/valhalla';
+import { requestStatus } from '@/utils/valhalla-client';
+import { getRoutingMode, getTileSource } from '@/utils/routing-engine';
 
 const VALHALLA_REPO_URL = 'https://github.com/valhalla/valhalla';
 
@@ -45,15 +46,12 @@ export const DataInfoTable = () => {
     isError,
   } = useQuery({
     queryKey: ['valhallaStatus'],
-    queryFn: async (): Promise<ValhallaStatus> => {
-      const response = await fetch(`${getValhallaUrl()}/status`, {
-        headers: VALHALLA_CLIENT_HEADERS,
-      });
-      const statusResponse = await response.json();
+    queryFn: async ({ signal }): Promise<ValhallaStatus> => {
+      const status = await requestStatus({ signal });
       return {
-        version: statusResponse.version,
-        buildFinished: statusResponse.tileset_last_modified
-          ? new Date(statusResponse.tileset_last_modified * 1000)
+        version: status.version,
+        buildFinished: status.tileset_last_modified
+          ? new Date(status.tileset_last_modified * 1000)
           : null,
       };
     },
@@ -69,29 +67,47 @@ export const DataInfoTable = () => {
   }
 
   const parsedVersion = parseVersion(status.version);
+  const isWasmMode = getRoutingMode() === 'wasm';
+  const tileSource = getTileSource();
 
   return (
     <Table data-testid="data-info-table" className="[&_tr]:border-0">
       <TableBody>
-        <TableRow>
-          <TableCell>Graph age</TableCell>
-          <TableCell>
-            {status.buildFinished ? (
-              <Tooltip>
-                <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
-                  {formatDistanceToNow(status.buildFinished, {
-                    addSuffix: true,
-                  })}
-                </TooltipTrigger>
-                <TooltipContent>
-                  {formatUtc(status.buildFinished)}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              '—'
-            )}
-          </TableCell>
-        </TableRow>
+        {/*
+          `tileset_last_modified` comes from the mtime of `GetTileSetLocation()`, which is the
+          IDBFS cache directory once wasm mode sets a cacheDir - the time tiles were last cached,
+          not the time the tileset was built. Showing the tile URL instead of a wrong age.
+        */}
+        {isWasmMode ? (
+          <TableRow>
+            <TableCell>Tileset</TableCell>
+            <TableCell className="font-mono break-all">
+              {tileSource.url
+                ? `${tileSource.url}${tileSource.gzipped ? ' (gzip)' : ''}`
+                : '—'}
+            </TableCell>
+          </TableRow>
+        ) : (
+          <TableRow>
+            <TableCell>Graph age</TableCell>
+            <TableCell>
+              {status.buildFinished ? (
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
+                    {formatDistanceToNow(status.buildFinished, {
+                      addSuffix: true,
+                    })}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {formatUtc(status.buildFinished)}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                '—'
+              )}
+            </TableCell>
+          </TableRow>
+        )}
         <TableRow>
           <TableCell>Version</TableCell>
           <TableCell className="font-mono">

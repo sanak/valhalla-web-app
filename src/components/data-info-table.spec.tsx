@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DataInfoTable } from './data-info-table';
@@ -9,14 +9,21 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: () => mockUseQuery(),
 }));
 
-vi.mock('@/utils/valhalla', () => ({
-  getValhallaUrl: () => 'https://valhalla.example',
-  VALHALLA_CLIENT_HEADERS: {},
+vi.mock('@/utils/valhalla-client', () => ({
+  requestStatus: vi.fn(),
 }));
 
 describe('DataInfoTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    // stubbed rather than left to .env: a local VITE_ROUTING_MODE=wasm would otherwise hide
+    // Graph age from every test that does not opt into wasm mode itself
+    vi.stubEnv('VITE_ROUTING_MODE', 'server');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('renders a relative build time and links the commit SHA to its GitHub commit', () => {
@@ -70,6 +77,27 @@ describe('DataInfoTable', () => {
     // Radix renders the tooltip content into a portal; the exact instant shows.
     const utc = await screen.findAllByText('2026-08-18 07:17:16 UTC');
     expect(utc.length).toBeGreaterThan(0);
+  });
+
+  it('shows the tile url instead of graph age in wasm mode', () => {
+    localStorage.setItem('valhalla_routing_mode', 'wasm');
+    localStorage.setItem(
+      'valhalla_tile_source',
+      JSON.stringify({ url: 'https://tiles.example/region.tar', gzipped: true })
+    );
+    mockUseQuery.mockReturnValue({
+      data: { version: '3.8.3', buildFinished: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<DataInfoTable />);
+
+    expect(screen.queryByText('Graph age')).not.toBeInTheDocument();
+    expect(screen.getByText('Tileset')).toBeInTheDocument();
+    expect(
+      screen.getByText('https://tiles.example/region.tar (gzip)')
+    ).toBeInTheDocument();
   });
 
   it('shows an error state when the status request fails', () => {

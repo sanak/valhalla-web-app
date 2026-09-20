@@ -28,6 +28,7 @@
     "coverage",
     "build",
     "playwright-report",
-    "test-results"
+    "test-results",
+    "public"
   ]
 }

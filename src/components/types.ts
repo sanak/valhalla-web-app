@@ -249,3 +249,20 @@ export interface ValhallaOptimizedRouteResponse {
   trip: Trip;
   id?: string;
 }
+
+export interface ValhallaHeightResponse {
+  id?: string;
+  /** Present when the request had `range: false`. */
+  height?: number[];
+  /** Present when the request had `range: true`: `[cumulativeDistance, height]` pairs. */
+  range_height?: [number, number][];
+}
+
+export interface ValhallaStatusResponse {
+  version: string;
+  available_actions: string[];
+  /** Seconds since the epoch. `0` when the tileset location has no readable mtime. */
+  tileset_last_modified: number;
+  /** Only present for a verbose request: tile-level coverage polygons. */
+  bbox?: GeoJSON.FeatureCollection;
+}

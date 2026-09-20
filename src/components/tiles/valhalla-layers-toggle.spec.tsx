@@ -66,10 +66,15 @@ describe('ValhallaLayersToggle', () => {
     mockMap = createMockMap();
     mockMapReady = true;
     vi.clearAllMocks();
+    localStorage.clear();
+    // stubbed rather than left to .env: a local VITE_ROUTING_MODE=wasm would otherwise disable
+    // the toggle, since the /tile MVT endpoint has no wasm equivalent
+    vi.stubEnv('VITE_ROUTING_MODE', 'server');
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('rendering', () => {
@@ -100,6 +105,17 @@ describe('ValhallaLayersToggle', () => {
       );
 
       expect(container).toBeEmptyDOMElement();
+    });
+
+    it('disables the toggle and explains why in wasm mode', () => {
+      localStorage.setItem('valhalla_routing_mode', 'wasm');
+
+      render(<ValhallaLayersToggle customLayers={[]} />);
+
+      expect(screen.getByRole('switch')).toBeDisabled();
+      expect(
+        screen.getByText(/only available in remote server mode/i)
+      ).toBeInTheDocument();
     });
   });
 

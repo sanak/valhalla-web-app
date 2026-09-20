@@ -104,10 +104,14 @@ describe('SettingsPanel', () => {
     mockUseParams.mockReturnValue({ activeTab: 'directions' });
     mockUseSearch.mockReturnValue({ profile: 'bicycle' });
     vi.stubGlobal('navigator', { ...originalNavigator, language: 'en-US' });
+    // stubbed rather than left to .env: a local VITE_ROUTING_MODE=wasm would otherwise hide the
+    // Server Settings section from every test that does not opt into wasm mode itself
+    vi.stubEnv('VITE_ROUTING_MODE', 'server');
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     localStorage.clear();
     vi.stubGlobal('navigator', originalNavigator);
   });
@@ -237,6 +241,22 @@ describe('SettingsPanel', () => {
 
     expect(screen.getByText('Use Living Streets')).toBeInTheDocument();
     expect(screen.getByText('Turn Penalty')).toBeInTheDocument();
+  });
+
+  describe('Routing Engine mode', () => {
+    it('hides Server Settings once the routing engine is switched to wasm mode', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<SettingsPanel />);
+
+      expect(screen.getByText('Server Settings')).toBeInTheDocument();
+
+      // CollapsibleSection unmounts its children while closed, so the section has to be
+      // opened before the mode radio is queryable.
+      await user.click(screen.getByRole('button', { name: /routing engine/i }));
+      await user.click(screen.getByRole('radio', { name: /browser/i }));
+
+      expect(screen.queryByText('Server Settings')).not.toBeInTheDocument();
+    });
   });
 
   describe('Server Settings', () => {

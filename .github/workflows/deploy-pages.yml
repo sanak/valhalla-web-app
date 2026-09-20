@@ -1,0 +1,106 @@
+name: Deploy Wasm demo to GitHub Pages
+
+on:
+  push:
+    branches:
+      - 'master'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # fork-only: the upstream repository has its own rsync deployment and no R2 bucket
+    if: github.repository == 'sanak/valhalla-web-app'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ⚙️ Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📥 Install
+        run: npm ci
+
+      # public/valhalla-wasm is gitignored - the valhalla repository builds it, this workflow
+      # pulls the same five files `npm run wasm:sync` would have copied
+      - name: 🧩 Fetch the Valhalla wasm artifacts
+        env:
+          WASM_BASE_URL: ${{ vars.VALHALLA_WASM_BASE_URL }}
+        run: |
+          test -n "$WASM_BASE_URL" || { echo "VALHALLA_WASM_BASE_URL is not set"; exit 1; }
+          mkdir -p public/valhalla-wasm
+          for artifact in index.mjs valhalla.json valhalla.mjs valhalla.wasm worker.js; do
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -o "public/valhalla-wasm/$artifact" "$WASM_BASE_URL/$artifact"
+          done
+          ls -l public/valhalla-wasm
+
+      # .env.production.local is gitignored and wins over the committed .env, so the fork's
+      # infrastructure URLs stay out of the repository
+      - name: 🔧 Write the production env
+        env:
+          TILE_URL: ${{ vars.VALHALLA_TILE_URL }}
+          # optional: true when the tar holds gzipped tiles (valhalla_build_extract --gzip)
+          TILE_URL_GZ: ${{ vars.VALHALLA_TILE_URL_GZ || 'false' }}
+        run: |
+          test -n "$TILE_URL" || { echo "VALHALLA_TILE_URL is not set"; exit 1; }
+          {
+            echo "VITE_ROUTING_MODE=wasm"
+            echo "VITE_VALHALLA_TILE_URL=$TILE_URL"
+            echo "VITE_VALHALLA_TILE_URL_GZ=$TILE_URL_GZ"
+            echo "VITE_CLIENT_ID=sanak-wasm-demo"
+            # the tileset only covers Japan, so Berlin (the upstream default) opens the
+            # demo outside its own coverage. DEFAULT_ZOOM is a hardcoded 10, so this has to
+            # be somewhere that reads well at city scale rather than the centre of the country
+            echo "VITE_CENTER_COORDS=35.68,139.77"
+          } > .env.production.local
+
+      # vite.config.ts derives `base` from package.json homepage
+      - name: 🏠 Point the bundle at the Pages URL
+        env:
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.homepage = process.env.PAGES_URL;
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+      - name: 🏗️ Build
+        run: npm run build
+
+      # GitHub Pages has no rewrite rules, so a deep link like /directions would land on
+      # GitHub's own 404 page instead of the router
+      - name: 🔁 SPA fallback
+        run: cp build/index.html build/404.html
+
+      - name: 📦 Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 🚀 Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -15,11 +15,8 @@ import type maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { throttle } from 'throttle-debounce';
-import {
-  getValhallaUrl,
-  buildHeightRequest,
-  VALHALLA_CLIENT_HEADERS,
-} from '@/utils/valhalla';
+import { buildHeightRequest } from '@/utils/valhalla';
+import { requestHeight } from '@/utils/valhalla-client';
 import { buildHeightgraphData } from '@/utils/heightgraph';
 import HeightGraph from '@/components/heightgraph';
 import { DrawControl } from './draw-control';
@@ -39,6 +36,7 @@ import {
   DOUBLE_TAP_THRESHOLD_MS,
 } from './constants';
 import type { MapStyleType } from './types';
+import { CoverageArea } from './parts/coverage-area';
 import { RouteLines } from './parts/route-lines';
 import { HighlightSegment } from './parts/highlight-segment';
 import { IsochronePolygons } from './parts/isochrone-polygons';
@@ -288,23 +286,12 @@ export const MapComponent = () => {
     setIsHeightLoading(true);
 
     try {
-      const response = await fetch(`${getValhallaUrl()}/height`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...VALHALLA_CLIENT_HEADERS,
-        },
-        body: JSON.stringify(buildHeightRequest([[lat, lng]])),
-      });
+      const heightResponse = await requestHeight(
+        buildHeightRequest([[lat, lng]])
+      );
 
-      if (!response.ok) {
-        throw new Error('Could not fetch resource');
-      }
-
-      const data = await response.json();
-
-      if ('height' in data) {
-        setElevation(data.height[0] + ' m');
+      if (heightResponse.height?.[0] !== undefined) {
+        setElevation(heightResponse.height[0] + ' m');
       }
     } catch (error) {
       console.error(error);
@@ -344,20 +331,15 @@ export const MapComponent = () => {
       setHeightPayload(heightPayloadNew);
 
       try {
-        const response = await fetch(`${getValhallaUrl()}/height`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...VALHALLA_CLIENT_HEADERS,
-          },
-          body: JSON.stringify(heightPayloadNew),
-        });
+        const heightResponse = await requestHeight(heightPayloadNew);
 
-        if (!response.ok) {
-          throw new Error('Could not fetch resource');
+        if (!heightResponse.range_height) {
+          console.error(
+            'Height response is missing range_height',
+            heightResponse
+          );
+          return;
         }
-
-        const data = await response.json();
 
         const reversedGeometry = JSON.parse(
           JSON.stringify(directionResults.data?.decodedGeometry)
@@ -366,7 +348,7 @@ export const MapComponent = () => {
         });
         const heightData = buildHeightgraphData(
           reversedGeometry,
-          data.range_height
+          heightResponse.range_height
         );
         const { inclineTotal, declineTotal } = heightData[0]!.properties;
         updateInclineDecline({
@@ -853,6 +835,7 @@ export const MapComponent = () => {
           onStyleChange={handleStyleChange}
           onCustomStyleLoaded={handleCustomStyleLoaded}
         />
+        <CoverageArea />
         <RouteLines />
         <HighlightSegment />
         <IsochronePolygons />
