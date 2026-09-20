@@ -47,12 +47,15 @@ describe('tileset coverage across a mode switch', () => {
     vi.clearAllMocks();
     localStorage.clear();
     localStorage.setItem('valhalla_routing_mode', 'wasm');
-    localStorage.setItem('valhalla_tar_url', TAR_URL);
+    localStorage.setItem(
+      'valhalla_tile_source',
+      JSON.stringify({ url: TAR_URL, gzipped: false })
+    );
   });
 
   it('drops the overlay when the backend is switched back to the server', async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData([COVERAGE_QUERY_KEY, TAR_URL], COVERAGE);
+    queryClient.setQueryData([COVERAGE_QUERY_KEY, TAR_URL, false], COVERAGE);
 
     render(
       <QueryClientProvider client={queryClient}>

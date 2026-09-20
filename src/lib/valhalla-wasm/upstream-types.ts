@@ -12,7 +12,7 @@
 export interface ValhallaActorOptions {
   /** URL of worker.js, resolved by the page. */
   workerUrl: string;
-  /** Valhalla config. `mjolnir.tile_url` pointing at a tar enables range-fetched tiles. */
+  /** Valhalla config. `mjolnir.tile_url` (a tar, or a `{tilePath}` URL) and `mjolnir.tile_url_gz` pick the remote tile layout. */
   config: Record<string, unknown>;
   /** Mount point for an IDBFS tile cache. `null` keeps tiles in memory only. */
   cacheDir?: string | null;

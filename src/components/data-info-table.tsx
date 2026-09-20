@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { requestStatus } from '@/utils/valhalla-client';
-import { getRoutingMode, getTarUrl } from '@/utils/routing-engine';
+import { getRoutingMode, getTileSource } from '@/utils/routing-engine';
 
 const VALHALLA_REPO_URL = 'https://github.com/valhalla/valhalla';
 
@@ -68,6 +68,7 @@ export const DataInfoTable = () => {
 
   const parsedVersion = parseVersion(status.version);
   const isWasmMode = getRoutingMode() === 'wasm';
+  const tileSource = getTileSource();
 
   return (
     <Table data-testid="data-info-table" className="[&_tr]:border-0">
@@ -75,13 +76,15 @@ export const DataInfoTable = () => {
         {/*
           `tileset_last_modified` comes from the mtime of `GetTileSetLocation()`, which is the
           IDBFS cache directory once wasm mode sets a cacheDir - the time tiles were last cached,
-          not the time the tileset was built. Showing the tar instead of a wrong age.
+          not the time the tileset was built. Showing the tile URL instead of a wrong age.
         */}
         {isWasmMode ? (
           <TableRow>
             <TableCell>Tileset</TableCell>
             <TableCell className="font-mono break-all">
-              {getTarUrl() || '—'}
+              {tileSource.url
+                ? `${tileSource.url}${tileSource.gzipped ? ' (gzip)' : ''}`
+                : '—'}
             </TableCell>
           </TableRow>
         ) : (

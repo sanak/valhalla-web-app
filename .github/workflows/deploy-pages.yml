@@ -53,12 +53,15 @@ jobs:
       # infrastructure URLs stay out of the repository
       - name: 🔧 Write the production env
         env:
-          TAR_URL: ${{ vars.VALHALLA_TAR_URL }}
+          TILE_URL: ${{ vars.VALHALLA_TILE_URL }}
+          # optional: true when the tar holds gzipped tiles (valhalla_build_extract --gzip)
+          TILE_URL_GZ: ${{ vars.VALHALLA_TILE_URL_GZ || 'false' }}
         run: |
-          test -n "$TAR_URL" || { echo "VALHALLA_TAR_URL is not set"; exit 1; }
+          test -n "$TILE_URL" || { echo "VALHALLA_TILE_URL is not set"; exit 1; }
           {
             echo "VITE_ROUTING_MODE=wasm"
-            echo "VITE_VALHALLA_TAR_URL=$TAR_URL"
+            echo "VITE_VALHALLA_TILE_URL=$TILE_URL"
+            echo "VITE_VALHALLA_TILE_URL_GZ=$TILE_URL_GZ"
             echo "VITE_CLIENT_ID=sanak-wasm-demo"
             # the tileset only covers Japan, so Berlin (the upstream default) opens the
             # demo outside its own coverage. DEFAULT_ZOOM is a hardcoded 10, so this has to

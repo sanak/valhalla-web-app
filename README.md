@@ -82,8 +82,8 @@ Edit `.env` to manage
 ## WebAssembly routing
 
 Besides talking to a remote Valhalla server, this app can run routing entirely in the browser via
-the [Valhalla wasm bindings](https://github.com/valhalla/valhalla), reading tiles by HTTP Range
-request from a tar hosted anywhere. This is useful for small, self-contained deployments (a single
+the [Valhalla wasm bindings](https://github.com/valhalla/valhalla), reading tiles over HTTP from
+a tar or a directory of tiles hosted anywhere. This is useful for small, self-contained deployments (a single
 region's tileset) that need no routing backend at all.
 
 ### 1. Build the bindings
@@ -113,24 +113,40 @@ Set in `.env`:
 
 ```
 VITE_ROUTING_MODE=wasm
-VITE_VALHALLA_TAR_URL=https://tiles.example.com/tiles.tar
+VITE_VALHALLA_TILE_URL=https://tiles.example.com/tiles.tar
+VITE_VALHALLA_TILE_URL_GZ=false
 ```
 
-(Both can also be changed at runtime from the "Routing Engine" section of the settings panel,
-without a rebuild.)
+(All of them can also be changed at runtime from the "Routing Engine" section of the settings
+panel, without a rebuild.)
 
-### Tar host requirements
+### Tile layouts
 
-The tar is read with HTTP Range requests, not downloaded whole, so the host serving it must:
+`VITE_VALHALLA_TILE_URL` and `VITE_VALHALLA_TILE_URL_GZ` are passed straight through as valhalla's
+`mjolnir.tile_url` and `mjolnir.tile_url_gz`. A URL containing `{tilePath}` addresses one file per
+tile; anything else is a tar.
 
-- Send `Accept-Ranges: bytes`
-- Allow the `Range` request header via CORS
-- Set `Access-Control-Expose-Headers: Content-Range`
+| Layout                                | Built with                                      | Tile URL             | GZ      |
+| ------------------------------------- | ----------------------------------------------- | -------------------- | ------- |
+| tar                                   | `valhalla_build_extract`                        | `…/tiles.tar`        | `false` |
+| tar of gzipped tiles                  | `valhalla_build_extract --gzip`                 | `…/tiles.tar`        | `true`  |
+| one `.gph` per tile + `index.bin`     | a tile dir, plus `index.bin` taken from a tar   | `…/tiles/{tilePath}` | `false` |
+| gzipped `.gph` per tile + `index.bin` | `gzip -9 -n` each tile, keeping the `.gph` name | `…/tiles/{tilePath}` | `true`  |
+
+- A tar is read with HTTP Range requests, not downloaded whole, so its host must send
+  `Accept-Ranges: bytes`, allow the `Range` request header via CORS, and set
+  `Access-Control-Expose-Headers: Content-Range`.
+- Per-tile layouts need `index.bin` next to the tiles. Without it valhalla turns
+  `loki.use_connectivity` off, so the map loses the tileset's coverage outline.
+- Serve `index.bin` uncompressed, and never set `Content-Encoding: gzip` on tiles or on the tar:
+  the browser would inflate them before valhalla does. A gzipped tar or gzipped tiles are already
+  compressed at rest, which is what makes them roughly 2.5× smaller.
 
 ### Notes
 
 - The first request downloads roughly 6.4MB of wasm/glue code before any routing happens.
-- Routing blocks on synchronous range requests against the tar, so a small regional tileset behind
-  a CDN is the intended shape — not a planet-scale tar.
-- Tiles read from the tar are cached in the browser's IndexedDB (IDBFS) and survive reloads; use
-  "Clear tile cache" in the Routing Engine settings section to reset it.
+- Routing blocks on synchronous tile requests, so a small regional tileset behind a CDN is the
+  intended shape — not a planet-scale tileset.
+- Fetched tiles are cached in the browser's IndexedDB (IDBFS), one database per tile URL and GZ
+  setting, and survive reloads; use "Clear tile cache" in the Routing Engine settings section to
+  remove them all.

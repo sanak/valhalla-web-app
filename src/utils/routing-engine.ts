@@ -1,20 +1,32 @@
 import { z } from 'zod';
 
 const MODE_STORAGE_KEY = 'valhalla_routing_mode';
-const TAR_URL_STORAGE_KEY = 'valhalla_tar_url';
+const TILE_SOURCE_STORAGE_KEY = 'valhalla_tile_source';
 
 /**
- * A tile URL containing this marker puts the bindings in per-tile mode, where
- * `loki.use_connectivity` is force-disabled because there is no index to enumerate. This app
- * needs connectivity for out-of-coverage detection, so only a tar is accepted.
+ * A tile URL containing this marker puts the bindings in per-tile mode (one file per tile);
+ * anything else is a tar read by range request. Per-tile mode only keeps
+ * `loki.use_connectivity` - and so the coverage outline - when an `index.bin` sits next to the
+ * tiles.
  */
 const PER_TILE_URL_MARKER = '{tilePath}';
+
+/** Where wasm mode reads tiles from: valhalla's `mjolnir.tile_url` and `mjolnir.tile_url_gz`. */
+export interface TileSource {
+  url: string;
+  gzipped: boolean;
+}
+
+const tileSourceSchema = z.object({
+  url: z.string(),
+  gzipped: z.boolean(),
+});
 
 export type RoutingMode = 'server' | 'wasm';
 
 const routingModeSchema = z.enum(['server', 'wasm']);
 
-const tarUrlSchema = z
+const tileUrlSchema = z
   .string()
   .trim()
   .min(1, 'URL cannot be empty')
@@ -30,8 +42,8 @@ const tarUrlSchema = z
     },
     { message: 'URL must use HTTP or HTTPS protocol' }
   )
-  .refine((url) => !url.includes(PER_TILE_URL_MARKER), {
-    message: 'Must be a tar URL, not a per-tile template',
+  .refine((url) => url.split(PER_TILE_URL_MARKER).length <= 2, {
+    message: `${PER_TILE_URL_MARKER} may appear only once`,
   });
 
 // read at call time, not module scope, so the default stays testable via vi.stubEnv
@@ -61,34 +73,61 @@ export function setRoutingMode(mode: RoutingMode): void {
   }
 }
 
-export function getDefaultTarUrl(): string {
-  return import.meta.env.VITE_VALHALLA_TAR_URL ?? '';
+export function getDefaultTileSource(): TileSource {
+  return {
+    url: import.meta.env.VITE_VALHALLA_TILE_URL ?? '',
+    gzipped: import.meta.env.VITE_VALHALLA_TILE_URL_GZ === 'true',
+  };
 }
 
-export function getTarUrl(): string {
+function isSameTileSource(a: TileSource, b: TileSource): boolean {
+  return a.url === b.url && a.gzipped === b.gzipped;
+}
+
+export function getTileSource(): TileSource {
   if (typeof window === 'undefined') {
-    return getDefaultTarUrl();
+    return getDefaultTileSource();
   }
-  return localStorage.getItem(TAR_URL_STORAGE_KEY) ?? getDefaultTarUrl();
+  const storedSource = localStorage.getItem(TILE_SOURCE_STORAGE_KEY);
+  if (storedSource === null) {
+    return getDefaultTileSource();
+  }
+  try {
+    const parsed = tileSourceSchema.safeParse(JSON.parse(storedSource));
+    return parsed.success ? parsed.data : getDefaultTileSource();
+  } catch {
+    return getDefaultTileSource();
+  }
 }
 
-export function setTarUrl(url: string): void {
+/** An empty URL means "back to the env default", flag included. */
+export function setTileSource(source: TileSource): void {
   if (typeof window === 'undefined') {
     return;
   }
-  const trimmedUrl = url.trim();
-  if (trimmedUrl === '' || trimmedUrl === getDefaultTarUrl()) {
-    localStorage.removeItem(TAR_URL_STORAGE_KEY);
+  const trimmedSource = { url: source.url.trim(), gzipped: source.gzipped };
+  if (
+    trimmedSource.url === '' ||
+    isSameTileSource(trimmedSource, getDefaultTileSource())
+  ) {
+    localStorage.removeItem(TILE_SOURCE_STORAGE_KEY);
   } else {
-    localStorage.setItem(TAR_URL_STORAGE_KEY, trimmedUrl);
+    localStorage.setItem(
+      TILE_SOURCE_STORAGE_KEY,
+      JSON.stringify(trimmedSource)
+    );
   }
 }
 
-export function validateTarUrl(url: string): {
+export function isPerTileUrl(url: string): boolean {
+  return url.includes(PER_TILE_URL_MARKER);
+}
+
+export function validateTileUrl(url: string): {
   valid: boolean;
   error?: string;
 } {
-  const parsed = tarUrlSchema.safeParse(url);
+  const parsed = tileUrlSchema.safeParse(url);
   if (parsed.success) {
     return { valid: true };
   }

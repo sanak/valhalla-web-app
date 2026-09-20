@@ -72,11 +72,11 @@ describe('DataInfoTable', () => {
     expect(utc.length).toBeGreaterThan(0);
   });
 
-  it('shows the tar url instead of graph age in wasm mode', () => {
+  it('shows the tile url instead of graph age in wasm mode', () => {
     localStorage.setItem('valhalla_routing_mode', 'wasm');
     localStorage.setItem(
-      'valhalla_tar_url',
-      'https://tiles.example/region.tar'
+      'valhalla_tile_source',
+      JSON.stringify({ url: 'https://tiles.example/region.tar', gzipped: true })
     );
     mockUseQuery.mockReturnValue({
       data: { version: '3.8.3', buildFinished: null },
@@ -89,7 +89,7 @@ describe('DataInfoTable', () => {
     expect(screen.queryByText('Graph age')).not.toBeInTheDocument();
     expect(screen.getByText('Tileset')).toBeInTheDocument();
     expect(
-      screen.getByText('https://tiles.example/region.tar')
+      screen.getByText('https://tiles.example/region.tar (gzip)')
     ).toBeInTheDocument();
   });
 

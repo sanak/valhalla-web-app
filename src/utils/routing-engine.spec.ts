@@ -3,21 +3,25 @@ import {
   getDefaultRoutingMode,
   getRoutingMode,
   setRoutingMode,
-  getTarUrl,
-  setTarUrl,
-  validateTarUrl,
+  getDefaultTileSource,
+  getTileSource,
+  setTileSource,
+  isPerTileUrl,
+  validateTileUrl,
 } from './routing-engine';
 
 const MODE_KEY = 'valhalla_routing_mode';
-const TAR_KEY = 'valhalla_tar_url';
+const SOURCE_KEY = 'valhalla_tile_source';
 const DEFAULT_TAR = 'https://tiles.example/planet.tar';
 const CUSTOM_TAR = 'https://other.example/region.tar';
+const PER_TILE_URL = 'https://tiles.example/tiles/{tilePath}';
 
 describe('routing-engine', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.stubEnv('VITE_ROUTING_MODE', 'server');
-    vi.stubEnv('VITE_VALHALLA_TAR_URL', DEFAULT_TAR);
+    vi.stubEnv('VITE_VALHALLA_TILE_URL', DEFAULT_TAR);
+    vi.stubEnv('VITE_VALHALLA_TILE_URL_GZ', '');
   });
 
   afterEach(() => {
@@ -70,55 +74,99 @@ describe('routing-engine', () => {
     });
   });
 
-  describe('getTarUrl', () => {
-    it('returns the default when nothing is stored', () => {
-      expect(getTarUrl()).toBe(DEFAULT_TAR);
+  describe('getDefaultTileSource', () => {
+    it('reads the url and treats an unset gz flag as plain tiles', () => {
+      expect(getDefaultTileSource()).toEqual({
+        url: DEFAULT_TAR,
+        gzipped: false,
+      });
     });
 
-    it('prefers the stored url', () => {
-      localStorage.setItem(TAR_KEY, CUSTOM_TAR);
-      expect(getTarUrl()).toBe(CUSTOM_TAR);
+    it('honours a true gz flag', () => {
+      vi.stubEnv('VITE_VALHALLA_TILE_URL_GZ', 'true');
+      expect(getDefaultTileSource().gzipped).toBe(true);
     });
   });
 
-  describe('setTarUrl', () => {
-    it('trims and stores a custom url', () => {
-      setTarUrl(`  ${CUSTOM_TAR}  `);
-      expect(localStorage.getItem(TAR_KEY)).toBe(CUSTOM_TAR);
+  describe('getTileSource', () => {
+    it('returns the default when nothing is stored', () => {
+      expect(getTileSource()).toEqual({ url: DEFAULT_TAR, gzipped: false });
     });
 
-    it('removes the key when the url matches the default', () => {
-      localStorage.setItem(TAR_KEY, CUSTOM_TAR);
-      setTarUrl(DEFAULT_TAR);
-      expect(localStorage.getItem(TAR_KEY)).toBeNull();
+    it('prefers the stored source', () => {
+      const storedSource = { url: CUSTOM_TAR, gzipped: true };
+      localStorage.setItem(SOURCE_KEY, JSON.stringify(storedSource));
+      expect(getTileSource()).toEqual(storedSource);
+    });
+
+    it.each(['not json', '{"url":"https://x.example/a.tar"}'])(
+      'ignores a corrupt stored value %s',
+      (corruptValue) => {
+        localStorage.setItem(SOURCE_KEY, corruptValue);
+        expect(getTileSource()).toEqual({ url: DEFAULT_TAR, gzipped: false });
+      }
+    );
+  });
+
+  describe('setTileSource', () => {
+    it('trims and stores a custom source', () => {
+      setTileSource({ url: `  ${CUSTOM_TAR}  `, gzipped: true });
+      expect(JSON.parse(localStorage.getItem(SOURCE_KEY) ?? '')).toEqual({
+        url: CUSTOM_TAR,
+        gzipped: true,
+      });
+    });
+
+    it('stores the default url when only the gz flag differs', () => {
+      setTileSource({ url: DEFAULT_TAR, gzipped: true });
+      expect(getTileSource()).toEqual({ url: DEFAULT_TAR, gzipped: true });
+    });
+
+    it('removes the key when the source matches the default', () => {
+      setTileSource({ url: CUSTOM_TAR, gzipped: true });
+      setTileSource({ url: DEFAULT_TAR, gzipped: false });
+      expect(localStorage.getItem(SOURCE_KEY)).toBeNull();
     });
 
     it('removes the key when the url is empty', () => {
-      localStorage.setItem(TAR_KEY, CUSTOM_TAR);
-      setTarUrl('');
-      expect(localStorage.getItem(TAR_KEY)).toBeNull();
+      setTileSource({ url: CUSTOM_TAR, gzipped: true });
+      setTileSource({ url: '', gzipped: true });
+      expect(localStorage.getItem(SOURCE_KEY)).toBeNull();
     });
   });
 
-  describe('validateTarUrl', () => {
-    it('accepts an https url', () => {
-      expect(validateTarUrl(DEFAULT_TAR).valid).toBe(true);
+  describe('isPerTileUrl', () => {
+    it('tells a per-tile template from a tar', () => {
+      expect(isPerTileUrl(PER_TILE_URL)).toBe(true);
+      expect(isPerTileUrl(DEFAULT_TAR)).toBe(false);
+    });
+  });
+
+  describe('validateTileUrl', () => {
+    it('accepts an https tar url', () => {
+      expect(validateTileUrl(DEFAULT_TAR).valid).toBe(true);
+    });
+
+    it('accepts a per-tile url template', () => {
+      expect(validateTileUrl(PER_TILE_URL).valid).toBe(true);
+    });
+
+    it('rejects a template with the marker twice', () => {
+      const validation = validateTileUrl(
+        'https://tiles.example/{tilePath}/{tilePath}'
+      );
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toMatch(/only once/);
     });
 
     it('rejects an empty url', () => {
-      expect(validateTarUrl('  ').valid).toBe(false);
+      expect(validateTileUrl('  ').valid).toBe(false);
     });
 
     it('rejects a non-http protocol', () => {
-      expect(validateTarUrl('ftp://tiles.example/planet.tar').valid).toBe(
+      expect(validateTileUrl('ftp://tiles.example/planet.tar').valid).toBe(
         false
       );
-    });
-
-    it('rejects a per-tile url template', () => {
-      const validation = validateTarUrl('https://tiles.example/{tilePath}');
-      expect(validation.valid).toBe(false);
-      expect(validation.error).toMatch(/tar/i);
     });
   });
 });

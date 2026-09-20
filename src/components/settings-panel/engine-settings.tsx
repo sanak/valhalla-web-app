@@ -11,16 +11,18 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { COVERAGE_QUERY_KEY } from '@/hooks/use-coverage-query';
 import { clearTileCache, resetActor } from '@/lib/valhalla-wasm/actor';
 import {
   getRoutingMode,
-  getTarUrl,
+  getTileSource,
   setRoutingMode,
-  setTarUrl,
-  validateTarUrl,
+  setTileSource,
+  validateTileUrl,
   type RoutingMode,
+  type TileSource,
 } from '@/utils/routing-engine';
 
 interface EngineSettingsProps {
@@ -33,8 +35,13 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
   const [routingMode, setRoutingModeState] = useState<RoutingMode>(() =>
     getRoutingMode()
   );
-  const [tarUrl, setTarUrlState] = useState<string>(() => getTarUrl());
-  const [tarUrlError, setTarUrlError] = useState<string | null>(null);
+  const [tileUrl, setTileUrlState] = useState<string>(
+    () => getTileSource().url
+  );
+  const [tileUrlGzipped, setTileUrlGzipped] = useState<boolean>(
+    () => getTileSource().gzipped
+  );
+  const [tileUrlError, setTileUrlError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   /** A booted worker answers from the old config, so it has to go whenever the config moves. */
@@ -59,33 +66,40 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
     onModeChange?.(nextMode);
   };
 
-  /** Stores whatever `setTarUrl` ended up keeping, then reboots onto the new config. */
-  const applyTarUrl = (url: string) => {
-    setTarUrlError(null);
-    setTarUrl(url);
-    // setTarUrl trims, and removes the localStorage key entirely for an empty or default
-    // value - re-read it so the field reflects what actually got stored.
-    setTarUrlState(getTarUrl());
+  /** Stores whatever `setTileSource` ended up keeping, then reboots onto the new config. */
+  const applyTileSource = (tileSource: TileSource) => {
+    setTileUrlError(null);
+    setTileSource(tileSource);
+    // setTileSource trims, and removes the localStorage key entirely for an empty or default
+    // source - re-read it so the controls reflect what actually got stored.
+    const storedSource = getTileSource();
+    setTileUrlState(storedSource.url);
+    setTileUrlGzipped(storedSource.gzipped);
     rebootBackend();
   };
 
-  const handleTarUrlBlur = () => {
-    if (tarUrl.trim() === getTarUrl()) {
-      setTarUrlError(null);
+  const handleTileUrlBlur = () => {
+    if (tileUrl.trim() === getTileSource().url) {
+      setTileUrlError(null);
       return;
     }
     // an emptied field means "back to the env default" - validation would only reject it as
     // empty and latch an error the user has no other way to clear
-    if (tarUrl.trim() === '') {
-      applyTarUrl('');
+    if (tileUrl.trim() === '') {
+      applyTileSource({ url: '', gzipped: tileUrlGzipped });
       return;
     }
-    const validation = validateTarUrl(tarUrl);
+    const validation = validateTileUrl(tileUrl);
     if (!validation.valid) {
-      setTarUrlError(validation.error ?? 'Invalid URL');
+      setTileUrlError(validation.error ?? 'Invalid URL');
       return;
     }
-    applyTarUrl(tarUrl);
+    applyTileSource({ url: tileUrl, gzipped: tileUrlGzipped });
+  };
+
+  /** Pairs the flag with the stored URL, not a half-typed or invalid one still in the field. */
+  const handleGzippedChange = (gzipped: boolean) => {
+    applyTileSource({ url: getTileSource().url, gzipped });
   };
 
   const handleClearCache = async () => {
@@ -133,26 +147,39 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
 
         {routingMode === 'wasm' && (
           <>
-            <Field data-invalid={!!tarUrlError}>
-              <FieldLabel htmlFor="tar-url-input">Tar URL</FieldLabel>
+            <Field data-invalid={!!tileUrlError}>
+              <FieldLabel htmlFor="tile-url-input">Tile URL</FieldLabel>
               <FieldDescription>
-                Tileset tar read by range request. The host must send{' '}
+                A tileset tar, read by range request: the host must send{' '}
                 <code>Accept-Ranges: bytes</code>, allow the <code>Range</code>{' '}
                 request header via CORS, and expose <code>Content-Range</code>.
+                Or one file per tile, as a URL ending in{' '}
+                <code>{'{tilePath}'}</code>; serve <code>index.bin</code> next
+                to the tiles, or the coverage outline is lost.
               </FieldDescription>
               <Input
-                id="tar-url-input"
+                id="tile-url-input"
                 type="url"
                 placeholder="https://tiles.example.com/tiles.tar"
-                value={tarUrl}
+                value={tileUrl}
                 onChange={(event) => {
-                  setTarUrlState(event.target.value);
-                  setTarUrlError(null);
+                  setTileUrlState(event.target.value);
+                  setTileUrlError(null);
                 }}
-                onBlur={handleTarUrlBlur}
-                aria-invalid={!!tarUrlError}
+                onBlur={handleTileUrlBlur}
+                aria-invalid={!!tileUrlError}
               />
-              <FieldError>{tarUrlError}</FieldError>
+              <FieldError>{tileUrlError}</FieldError>
+            </Field>
+            <Field orientation="horizontal">
+              <Switch
+                id="tile-url-gz-switch"
+                checked={tileUrlGzipped}
+                onCheckedChange={handleGzippedChange}
+              />
+              <FieldLabel htmlFor="tile-url-gz-switch">
+                Gzipped tiles
+              </FieldLabel>
             </Field>
             <Button
               variant="outline"
