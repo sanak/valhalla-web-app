@@ -39,6 +39,9 @@ describe('EngineSettings', () => {
     vi.clearAllMocks();
     vi.stubEnv('VITE_ROUTING_MODE', 'server');
     vi.stubEnv('VITE_VALHALLA_TILE_URL', 'https://tiles.example/planet.tar');
+    // stubbed rather than left to .env: a local VITE_VALHALLA_TILE_URL_GZ=true would otherwise
+    // flip the switch's initial state and every stored source with it
+    vi.stubEnv('VITE_VALHALLA_TILE_URL_GZ', 'false');
   });
 
   afterEach(() => {

@@ -133,6 +133,8 @@ tile; anything else is a tar.
 | one `.gph` per tile + `index.bin`     | a tile dir, plus `index.bin` taken from a tar   | `…/tiles/{tilePath}` | `false` |
 | gzipped `.gph` per tile + `index.bin` | `gzip -9 -n` each tile, keeping the `.gph` name | `…/tiles/{tilePath}` | `true`  |
 
+- The `{tilePath}` marker is what selects the per-tile layout: a URL without it is read as a tar,
+  so pointing at a tile directory fails with `The first file's tar header is not valid`.
 - A tar is read with HTTP Range requests, not downloaded whole, so its host must send
   `Accept-Ranges: bytes`, allow the `Range` request header via CORS, and set
   `Access-Control-Expose-Headers: Content-Range`.

@@ -150,12 +150,19 @@ export const EngineSettings = ({ onModeChange }: EngineSettingsProps = {}) => {
             <Field data-invalid={!!tileUrlError}>
               <FieldLabel htmlFor="tile-url-input">Tile URL</FieldLabel>
               <FieldDescription>
-                A tileset tar, read by range request: the host must send{' '}
-                <code>Accept-Ranges: bytes</code>, allow the <code>Range</code>{' '}
-                request header via CORS, and expose <code>Content-Range</code>.
-                Or one file per tile, as a URL ending in{' '}
-                <code>{'{tilePath}'}</code>; serve <code>index.bin</code> next
-                to the tiles, or the coverage outline is lost.
+                One file per tile, as a URL ending in the literal{' '}
+                <code>{'{tilePath}'}</code> — e.g.{' '}
+                <code className="break-all">
+                  https://tiles.example.com/tiles/{'{tilePath}'}
+                </code>
+                . Serve <code>index.bin</code> next to the tiles, or the
+                coverage outline is lost.
+              </FieldDescription>
+              <FieldDescription>
+                Any other URL is read as a tileset tar by range request, so the
+                host must send <code>Accept-Ranges: bytes</code>, allow the{' '}
+                <code>Range</code> request header via CORS, and expose{' '}
+                <code>Content-Range</code>.
               </FieldDescription>
               <Input
                 id="tile-url-input"
