@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DataInfoTable } from './data-info-table';
@@ -17,6 +17,13 @@ describe('DataInfoTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // stubbed rather than left to .env: a local VITE_ROUTING_MODE=wasm would otherwise hide
+    // Graph age from every test that does not opt into wasm mode itself
+    vi.stubEnv('VITE_ROUTING_MODE', 'server');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('renders a relative build time and links the commit SHA to its GitHub commit', () => {

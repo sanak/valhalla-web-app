@@ -67,10 +67,14 @@ describe('ValhallaLayersToggle', () => {
     mockMapReady = true;
     vi.clearAllMocks();
     localStorage.clear();
+    // stubbed rather than left to .env: a local VITE_ROUTING_MODE=wasm would otherwise disable
+    // the toggle, since the /tile MVT endpoint has no wasm equivalent
+    vi.stubEnv('VITE_ROUTING_MODE', 'server');
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('rendering', () => {
